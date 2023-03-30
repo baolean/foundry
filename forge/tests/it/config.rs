@@ -113,6 +113,14 @@ pub static TEST_OPTS: TestOptions = TestOptions {
         include_storage: true,
         include_push_bytes: true,
     },
+    symbolic: SymbolicConfig {
+        symbolic_storage: false,
+        concrete_validation: true,
+        solver: 2, // yices2
+        solver_timeout: 10_000,
+        loop_bound: 5,
+        call_bound: 1,
+    },
 };
 
 pub fn manifest_root() -> PathBuf {

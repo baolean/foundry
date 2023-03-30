@@ -1,10 +1,12 @@
+extern crate esvm;
+
 use crate::{
     result::{SuiteResult, TestKind, TestResult, TestSetup},
     TestFilter, TestOptions,
 };
 use ethers::{
     abi::{Abi, Function},
-    types::{Address, Bytes, U256},
+    types::{Address, Bytes, H160, U256},
 };
 use eyre::{Result, WrapErr};
 use foundry_common::{
@@ -18,14 +20,18 @@ use foundry_evm::{
         invariant::{
             InvariantContract, InvariantExecutor, InvariantFuzzError, InvariantFuzzTestResult,
         },
-        FuzzedExecutor,
+        BaseCounterExample, CounterExample, FuzzedExecutor, SymbolicCase,
     },
     trace::{load_contracts, TraceKind},
-    CALLER,
+    utils, CALLER,
 };
 use proptest::test_runner::{TestError, TestRunner};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{collections::BTreeMap, time::Instant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    time::Instant,
+};
 use tracing::{error, trace};
 
 /// A type that executes all tests of a contract
@@ -234,9 +240,12 @@ impl<'a> ContractRunner<'a> {
 
         let has_invariants = self.contract.functions().any(|func| func.name.is_invariant_test());
 
+        let has_symbolic_tests =
+            self.contract.functions().into_iter().any(|func| func.name.is_symbolic_test());
+
         // Invariant testing requires tracing to figure out what contracts were created.
         let original_tracing = self.executor.inspector_config().tracing;
-        if has_invariants && needs_setup {
+        if (has_invariants || has_symbolic_tests) && needs_setup {
             self.executor.set_tracing(true);
         }
 
@@ -289,6 +298,43 @@ impl<'a> ContractRunner<'a> {
                             )
                         } else {
                             self.clone().run_test(func, *should_fail, setup.clone())
+                        }
+                        .map(|result| Ok((func.signature(), result)))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()?,
+            );
+        }
+
+        if has_symbolic_tests {
+            let symbolic_functions: Vec<&Function> = self
+                .contract
+                .functions()
+                .into_iter()
+                .filter(|func| {
+                    func.name.is_symbolic_test() && filter.matches_test(func.signature())
+                })
+                .collect();
+
+            let analyzed_contract: &H160 = &setup.address;
+            let identified_contracts = load_contracts(setup.traces.clone(), known_contracts);
+
+            println!(
+                "Executing symbolic tests with symbolic functions {:?}",
+                symbolic_functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+            );
+
+            test_results.extend(
+                symbolic_functions
+                    .par_iter()
+                    .flat_map(|func| {
+                        {
+                            self.run_symbolic_test(
+                                setup.clone(),
+                                test_options,
+                                func,
+                                analyzed_contract,
+                                identified_contracts.clone(),
+                            )
                         }
                         .map(|result| Ok((func.signature(), result)))
                     })
@@ -521,6 +567,87 @@ impl<'a> ContractRunner<'a> {
         } else {
             Ok(vec![])
         }
+    }
+
+    #[tracing::instrument(name = "symbolic-test", skip_all)]
+    pub fn run_symbolic_test(
+        &self,
+        setup: TestSetup,
+        test_options: TestOptions,
+        function: &Function,
+        analyzed_contract: &H160,
+        identified_contracts: ContractsByAddress,
+    ) -> Result<TestResult> {
+        let TestSetup { address: _, logs, traces, labeled_addresses, .. } = setup;
+
+        let mut setup_accounts: HashMap<String, (String, HashMap<String, String>)> = HashMap::new();
+
+        let db = self.executor.backend().mem_db();
+        for (address, account) in db.accounts.iter() {
+            let mut account_storage: HashMap<String, String> = HashMap::new();
+            // Recording basic account information
+            let account_code: String = hex::encode(&account.info.code.as_ref().unwrap().bytes());
+            // Recording storage values to set up symbolic tests
+            for (slot, value) in &account.storage {
+                account_storage.insert(
+                    hex::encode(utils::u256_to_h256_be(*slot)),
+                    hex::encode(utils::u256_to_h256_be(*value)),
+                );
+            }
+            setup_accounts.insert(hex::encode(address), (account_code, account_storage));
+        }
+
+        // Recording a signature for the "prove_xxx" function to analyze
+        let signature: String = hex::encode(function.short_signature());
+
+        // Running symbolic analysis in EthBMC
+        let symbolic_result: Option<(String, String, String)> = esvm::forge_analysis(
+            hex::encode(*analyzed_contract),
+            signature,
+            setup_accounts,
+            serde_json::to_string(&test_options.symbolic).unwrap(),
+        );
+
+        if let Some(result) = symbolic_result {
+            let counterexample = BaseCounterExample::create(
+                H160::from_str(&result.0).unwrap(),
+                H160::from_str(&result.1).unwrap(),
+                &Bytes::from_str(&result.2).unwrap(),
+                &identified_contracts,
+                None,
+            )
+            .wrap_err("Failed to create counterexample")?;
+
+            let case: SymbolicCase = SymbolicCase { calldata: Bytes::from_str(&result.2).unwrap() };
+
+            let logs = logs.clone();
+            let labeled_addresses = labeled_addresses.clone();
+            let traces = traces.clone();
+
+            return (Ok(TestResult {
+                success: false,
+                reason: None,
+                counterexample: Some(CounterExample::Single(counterexample)),
+                decoded_logs: decode_console_logs(&logs),
+                logs,
+                kind: TestKind::Symbolic,
+                traces,
+                coverage: None,
+                labeled_addresses,
+            }))
+        }
+
+        Ok(TestResult {
+            success: true,
+            reason: None,
+            counterexample: None,
+            decoded_logs: decode_console_logs(&logs),
+            logs,
+            kind: TestKind::Symbolic,
+            traces,
+            coverage: None,
+            labeled_addresses,
+        })
     }
 
     #[tracing::instrument(name = "fuzz-test", skip_all, fields(name = %func.signature(), %should_fail))]

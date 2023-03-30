@@ -46,7 +46,7 @@ pub struct MultiContractRunner {
     pub cheats_config: CheatsConfig,
     /// Whether to collect coverage info
     pub coverage: bool,
-    /// Settings related to fuzz and/or invariant tests
+    /// Settings related to fuzz, invariant, and/or symbolic tests
     pub test_options: TestOptions,
 }
 

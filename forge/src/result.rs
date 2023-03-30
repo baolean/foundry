@@ -105,6 +105,7 @@ pub enum TestKindReport {
     Standard { gas: u64 },
     Fuzz { runs: usize, mean_gas: u64, median_gas: u64 },
     Invariant { runs: usize, calls: usize, reverts: usize },
+    Symbolic {},
 }
 
 impl fmt::Display for TestKindReport {
@@ -119,6 +120,8 @@ impl fmt::Display for TestKindReport {
             TestKindReport::Invariant { runs, calls, reverts } => {
                 write!(f, "(runs: {runs}, calls: {calls}, reverts: {reverts})")
             }
+            // TODO(baolean): report solver stats
+            TestKindReport::Symbolic {} => write!(f, ""),
         }
     }
 }
@@ -132,6 +135,7 @@ impl TestKindReport {
             TestKindReport::Fuzz { median_gas, .. } => *median_gas,
             // We return 0 since it's not applicable
             TestKindReport::Invariant { .. } => 0,
+            TestKindReport::Symbolic { .. } => 0,
         }
     }
 }
@@ -152,7 +156,12 @@ pub enum TestKind {
         median_gas: u64,
     },
     /// A solidity invariant test, that stores all test cases
-    Invariant { runs: usize, calls: usize, reverts: usize },
+    Invariant {
+        runs: usize,
+        calls: usize,
+        reverts: usize,
+    },
+    Symbolic,
 }
 
 impl TestKind {
@@ -166,6 +175,12 @@ impl TestKind {
             TestKind::Invariant { runs, calls, reverts } => {
                 TestKindReport::Invariant { runs: *runs, calls: *calls, reverts: *reverts }
             }
+            TestKind::Symbolic { } => {
+                TestKindReport::Symbolic { }
+            }
+            // TestKind::Symbolic(analyzed) => TestKindReport::Symbolic {
+            //     calls: analyzed.iter().map(|sequence| sequence.cases().len()).sum(),
+            // },
         }
     }
 }

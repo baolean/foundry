@@ -10,6 +10,9 @@ foundry-common = { path = "./../common" }
 foundry-config = { path = "./../config" }
 foundry-evm = { path = "./../evm" }
 
+# TODO(baolean): local EthBMC crate
+esvm = {path = "./../../EthBMC/esvm"}
+
 ethers = { workspace = true, default-features = false, features = ["solc-full"] }
 eyre = "0.6.5"
 semver = "1.0.5"

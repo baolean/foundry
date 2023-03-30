@@ -458,3 +458,10 @@ pub struct FuzzCase {
     /// The initial gas stipend for the transaction
     pub stipend: u64,
 }
+
+/// Data of a single symbolc test case
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SymbolicCase {
+    /// The calldata used for this symbolic test
+    pub calldata: Bytes,
+}

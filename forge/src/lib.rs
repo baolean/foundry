@@ -30,6 +30,8 @@ pub struct TestOptions {
     pub fuzz: foundry_config::FuzzConfig,
     /// The invariant test configuration
     pub invariant: foundry_config::InvariantConfig,
+    /// The symbolic test configuration
+    pub symbolic: foundry_config::SymbolicConfig,
 }
 
 impl TestOptions {

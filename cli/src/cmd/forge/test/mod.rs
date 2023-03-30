@@ -121,7 +121,11 @@ impl TestArgs {
         // Merge all configs
         let (mut config, mut evm_opts) = self.load_config_and_evm_opts_emit_warnings()?;
 
-        let test_options = TestOptions { fuzz: config.fuzz, invariant: config.invariant };
+        let test_options = TestOptions {
+            fuzz: config.fuzz,
+            invariant: config.invariant,
+            symbolic: config.symbolic,
+        };
 
         let mut filter = self.filter(&config);
 

@@ -92,6 +92,9 @@ use crate::fs_permissions::PathPermission;
 pub use invariant::InvariantConfig;
 use providers::remappings::RemappingsProvider;
 
+mod symbolic;
+pub use symbolic::SymbolicConfig;
+
 /// Foundry configuration
 ///
 /// # Defaults
@@ -230,6 +233,8 @@ pub struct Config {
     pub fuzz: FuzzConfig,
     /// Configuration for invariant testing
     pub invariant: InvariantConfig,
+    /// Configuration for symbolic analysis
+    pub symbolic: SymbolicConfig,
     /// Whether to allow ffi cheatcodes in test
     pub ffi: bool,
     /// The address which will be executing all tests
@@ -390,7 +395,7 @@ impl Config {
 
     /// Standalone sections in the config which get integrated into the selected profile
     pub const STANDALONE_SECTIONS: &'static [&'static str] =
-        &["rpc_endpoints", "etherscan", "fmt", "doc", "fuzz", "invariant"];
+        &["rpc_endpoints", "etherscan", "fmt", "doc", "fuzz", "invariant", "symbolic"];
 
     /// File name of config toml file
     pub const FILE_NAME: &'static str = "foundry.toml";
@@ -1742,6 +1747,7 @@ impl Default for Config {
             path_pattern_inverse: None,
             fuzz: Default::default(),
             invariant: Default::default(),
+            symbolic: Default::default(),
             ffi: false,
             sender: Config::DEFAULT_SENDER,
             tx_origin: Config::DEFAULT_SENDER,

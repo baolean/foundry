@@ -18,6 +18,8 @@ pub trait TestFunctionExt {
     fn is_invariant_test(&self) -> bool;
     /// Whether this function should be executed as fuzz test
     fn is_fuzz_test(&self) -> bool;
+    /// Whether this function should be executed symbolically
+    fn is_symbolic_test(&self) -> bool;
     /// Whether this function is a test
     fn is_test(&self) -> bool;
     /// Whether this function is a test that should fail
@@ -34,6 +36,10 @@ impl TestFunctionExt for Function {
     fn is_fuzz_test(&self) -> bool {
         // test functions that have inputs are considered fuzz tests as those inputs will be fuzzed
         !self.inputs.is_empty()
+    }
+
+    fn is_symbolic_test(&self) -> bool {
+        self.name.is_symbolic_test()
     }
 
     fn is_test(&self) -> bool {
@@ -58,6 +64,10 @@ impl<'a> TestFunctionExt for &'a str {
         unimplemented!("no naming convention for fuzz tests.")
     }
 
+    fn is_symbolic_test(&self) -> bool {
+        self.starts_with("prove")
+    }
+
     fn is_test(&self) -> bool {
         self.starts_with("test")
     }
@@ -78,6 +88,10 @@ impl TestFunctionExt for String {
 
     fn is_fuzz_test(&self) -> bool {
         self.as_str().is_fuzz_test()
+    }
+
+    fn is_symbolic_test(&self) -> bool {
+        self.as_str().is_symbolic_test()
     }
 
     fn is_test(&self) -> bool {
